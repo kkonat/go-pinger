@@ -42,28 +42,26 @@ func NewTable() *table {
 
 func (t table) displayHeader() {
 	w.ClearScreen()
-	w.Gotoxy(0, 0)
-	fmt.Printf("#\turl\t\t\t\tping\tmin\tmax\tavg\terrors")
-	w.Gotoxy(0, 2)
-	fmt.Printf("--------------------------------------------------------------------------------")
+
+	w.PrintLine(1, fmt.Sprint("#\turl\t\t\t\tping\tmin\tmax\tavg\terrors"))
+	w.PrintLine(2, "----------------------------------------------------------------------------------------------------------------------------------------------------------------")
 }
 func (t table) displayRow(row int) {
-	w.Gotoxy(0, row+3)
+
 	ti := t.data[row]
 	if ti.count != 0 {
-		fmt.Printf("%d\t%s\t\t%d  \t%d  \t%d  \t%.2f  \t%s", row+1, urls[row], ti.lastVal, ti.min, ti.max, (float64(ti.sum) / float64(ti.count)), ti.status)
+		w.PrintLine(row+3, fmt.Sprintf("%d\t%s\t\t%d  \t%d  \t%d  \t%.2f  \t%s", row+1, urls[row], ti.lastVal, ti.min, ti.max, (float64(ti.sum)/float64(ti.count)), ti.status))
 	} else {
-		fmt.Printf("%d\t%s\t\t?  \t?  \t?  \t?  \t%s", row+1, urls[row], ti.status)
+		w.PrintLine(row+3, fmt.Sprintf("%d\t%s\t\t?  \t?  \t?  \t?  \t%s", row+1, urls[row], ti.status))
 	}
 
 }
 
 const clipLen = 80
 
-func (t *table) update(meas measurement) {
+func (t *table) update(meas msrMsg) {
 
 	if meas.status != "OK" {
-
 		if len(meas.status) <= clipLen {
 			t.data[meas.urlId].status = meas.status
 		} else {

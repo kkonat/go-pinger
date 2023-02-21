@@ -2,25 +2,38 @@ package window
 
 import (
 	"fmt"
-	"log"
+	"sync"
+	"time"
 )
 
+var wm sync.Mutex
 var consoleLine int = 0
+
+var Log chan string
 
 func Init(ConsoleLine int) {
 	consoleLine = ConsoleLine
-}
-
-func Gotoxy(x, y int) {
-	fmt.Printf("\033[%d;%dH", y, x)
+	Log = make(chan string)
+	go LogPrinter()
 }
 
 func ClearScreen() {
 	fmt.Printf("\033[2J")
 }
 
-func Log(line string) {
-	Gotoxy(0, consoleLine)
-	log.Print(line)
-	consoleLine++
+func PrintLine(line int, text string) {
+	fmt.Print(goTo(line), text)
+}
+
+func LogPrinter() {
+	for line := range Log {
+		timestamp := time.Now().Format("2006-01-02 15:04:05 ")
+		fmt.Print(goTo(consoleLine), timestamp, line)
+		consoleLine++
+
+	}
+}
+
+func goTo(y int) string {
+	return fmt.Sprintf("\033[%d;0H", y)
 }

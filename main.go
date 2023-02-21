@@ -9,7 +9,7 @@ import (
 )
 
 const measurePeriod = 10
-
+const MPS = 4 // Measurements per second
 var urls []string = []string{
 	"http://www.onet.pl",
 	"http://www.gazeta.pl",
@@ -19,15 +19,13 @@ var urls []string = []string{
 	"http://www.icm.edu.pl",
 }
 
-const MPS = 4 // Measurements per second
-
-type measurement struct {
+type msrMsg struct {
 	urlId  int
 	v      uint64
 	status string
 }
 
-func measure(ctx context.Context, index int, ch chan<- measurement) {
+func measurer(ctx context.Context, index int, ch chan<- msrMsg) {
 	var duration uint64
 	status := ""
 
@@ -37,15 +35,14 @@ func measure(ctx context.Context, index int, ch chan<- measurement) {
 		select {
 
 		case <-ctx.Done():
+			w.Log <- fmt.Sprintf("terminating: %d", index)
 			return
 
 		case <-ticker:
 
 			start := time.Now()
 			req, err := http.NewRequestWithContext(ctx, "GET", urls[index], nil)
-			if err != nil {
-				status = fmt.Sprintf("%s", err)
-			} else {
+			if err == nil {
 				_, err = http.DefaultClient.Do(req)
 				if err != nil {
 					status = fmt.Sprintf("%s", err)
@@ -53,37 +50,40 @@ func measure(ctx context.Context, index int, ch chan<- measurement) {
 					duration = uint64(time.Since(start).Milliseconds())
 					status = "OK"
 				}
+			} else {
+				status = fmt.Sprintf("%s", err)
 			}
-			ch <- measurement{urlId: index, v: duration, status: status}
+			ch <- msrMsg{urlId: index, v: duration, status: status}
 		}
 	}
 }
 
 func main() {
-	w.Init(len(urls) + 4)
-	table := *NewTable()
+
+	table := NewTable()
 
 	ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
 	defer func() {
-		w.Log("Context timed out. Calling cancel().")
+		w.Log <- "Context timed out. Calling cancel()."
 		cancel()
 	}()
 
-	ch := make(chan measurement)
+	w.Init(len(urls) + 4)
 
-	w.Log("Launching workers...")
+	ch := make(chan msrMsg)
+
+	w.Log <- "Launching workers..."
 
 	table.displayHeader()
 	for i := range urls {
-
 		table.displayRow(i)
 
-		go measure(ctx, i, ch)
+		go measurer(ctx, i, ch)
 	}
 
-	var meas measurement
+	var meas msrMsg
 
-	w.Log("Starting...")
+	w.Log <- "Starting..."
 
 loop:
 	for {
@@ -93,9 +93,9 @@ loop:
 			table.displayRow(meas.urlId)
 
 		case <-ctx.Done():
-			w.Log("Context expired. Breaking out of loop")
+			w.Log <- "Context expired. Breaking out of loop"
 			break loop
 		}
 	}
-	w.Log("Goodbya")
+
 }
