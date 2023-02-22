@@ -1,101 +1,100 @@
 package main
 
 import (
-	"context"
 	"fmt"
-	"net/http"
-	w "pinger/window"
-	"time"
+	t "pinger/table"
 )
 
-const measurePeriod = 10
-const MPS = 4 // Measurements per second
-var urls []string = []string{
-	"http://www.onet.pl",
-	"http://www.gazeta.pl",
-	"http://www.wsj.com",
-	"http://www.google.com",
-	"http://nonexistent.com",
-	"http://www.icm.edu.pl",
+type tableItem struct {
+	url     string `td:"name='website',  w= 30,   sep='|'"`
+	lastVal uint64 `td:"name='ping (ms)',w= 9, R, sep='>'"`
+	min     uint64 `td:"w= 8, R"`
+	max     uint64 `td:"w= 8, R"`
+	avg     uint64 `td:"w= 8, R"`
+	status  string `td:"name='errors',   w= 60,   sep='|'"`
+	count   uint64
+	sum     uint64
+	valid   bool
 }
 
-type msrMsg struct {
-	urlId  int
-	v      uint64
-	status string
-}
-
-func measurer(ctx context.Context, index int, ch chan<- msrMsg) {
-	var duration uint64
-	status := ""
-
-	ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
-
-	for {
-		select {
-
-		case <-ctx.Done():
-			w.Log <- fmt.Sprintf("terminating: %d", index)
-			return
-
-		case <-ticker:
-
-			start := time.Now()
-			req, err := http.NewRequestWithContext(ctx, "GET", urls[index], nil)
-			if err == nil {
-				_, err = http.DefaultClient.Do(req)
-				if err != nil {
-					status = fmt.Sprintf("%s", err)
-				} else {
-					duration = uint64(time.Since(start).Milliseconds())
-					status = "OK"
-				}
-			} else {
-				status = fmt.Sprintf("%s", err)
-			}
-			ch <- msrMsg{urlId: index, v: duration, status: status}
+func (ti tableItem) GenCells() *[]string {
+	if ti.valid {
+		return &[]string{
+			ti.url,
+			fmt.Sprintf("%4.d", ti.lastVal),
+			fmt.Sprintf("%4.d", ti.min),
+			fmt.Sprintf("%4.d", ti.max),
+			fmt.Sprintf("%8.2f", float64(ti.sum)/float64(ti.count)),
+			ti.status,
 		}
+	} else {
+		return &[]string{ti.url, "?", "?", "?", "?", "connecting..."}
 	}
 }
+
+// type tablit struct {
+// }
+
+// func (ti tablit) GenCells() *[]string { return &[]string{"", ""} }
 
 func main() {
+	// dd := tablit{}
+	// var td []t.Data = []t.Data{dd, dd}
+	// fmt.Println("%T", td)
 
-	table := NewTable()
-
-	ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
-	defer func() {
-		w.Log <- "Context timed out. Calling cancel()."
-		cancel()
-	}()
-
-	w.Init(len(urls) + 4)
-
-	ch := make(chan msrMsg)
-
-	w.Log <- "Launching workers..."
-
-	table.displayHeader()
-	for i := range urls {
-		table.displayRow(i)
-
-		go measurer(ctx, i, ch)
+	table := t.New()
+	var tableData []t.Data = []t.Data{
+		tableItem{url: "http://www.onet.pl"},
+		tableItem{url: "http://www.gazeta.pl"},
+		tableItem{url: "http://www.wsj.com"},
+		tableItem{url: "http://www.google.com"},
+		tableItem{url: "http://nonexistent.com"},
+		tableItem{url: "http://www.icm.edu.pl"},
 	}
 
-	var meas msrMsg
+	table.Init(tableData, true)
+	table.Print()
 
-	w.Log <- "Starting..."
+	// func (ti *tableItem) GenRowData(row int) []string {
+	// 	return []string{
+	// 		fmt.Sprintf("%3d", row),
+	// 		fmt.Sprintf("%s", tableData[row].url)
+	// 	}
+	// }
+	// 	ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
+	// 	defer func() {
+	// 		w.Log <- "Context timed out. Calling cancel()."
+	// 		cancel()
+	// 	}()
 
-loop:
-	for {
-		select {
-		case meas = <-ch:
-			table.update(meas)
-			table.displayRow(meas.urlId)
+	// 	w.Init(len(urls) + 4)
 
-		case <-ctx.Done():
-			w.Log <- "Context expired. Breaking out of loop"
-			break loop
-		}
-	}
+	// 	ch := make(chan msrMsg)
+
+	// 	w.Log <- "Launching workers..."
+
+	// 	table.displayHeader()
+	// 	for i := range urls {
+	// 		table.displayRow(i)
+
+	// 		go measurer(ctx, i, ch)
+	// 	}
+
+	// 	var meas msrMsg
+
+	// 	w.Log <- "Starting..."
+
+	// loop:
+	// 	for {
+	// 		select {
+	// 		case meas = <-ch:
+	// 			table.update(meas)
+	// 			table.displayRow(meas.urlId)
+
+	// 		case <-ctx.Done():
+	// 			w.Log <- "Context expired. Breaking out of loop"
+	// 			break loop
+	// 		}
+	// 	}
 
 }
