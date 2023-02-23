@@ -3,99 +3,110 @@ package main
 import (
 	"context"
 	"fmt"
-	"net/http"
+	"math/rand"
+	"os"
+	"os/signal"
+	t "pinger/table"
 	w "pinger/window"
+	"sync"
+	"syscall"
 	"time"
 )
 
-const measurePeriod = 10
-const MPS = 4 // Measurements per second
-var urls []string = []string{
-	"http://www.onet.pl",
-	"http://www.gazeta.pl",
-	"http://www.wsj.com",
-	"http://www.google.com",
-	"http://nonexistent.com",
-	"http://www.icm.edu.pl",
+func init() {
+	rand.Seed(time.Now().Unix())
 }
 
-type msrMsg struct {
-	urlId  int
-	v      uint64
-	status string
-}
-
-func measurer(ctx context.Context, index int, ch chan<- msrMsg) {
-	var duration uint64
-	status := ""
-
-	ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
-
-	for {
-		select {
-
-		case <-ctx.Done():
-			w.Log <- fmt.Sprintf("terminating: %d", index)
-			return
-
-		case <-ticker:
-
-			start := time.Now()
-			req, err := http.NewRequestWithContext(ctx, "GET", urls[index], nil)
-			if err == nil {
-				_, err = http.DefaultClient.Do(req)
-				if err != nil {
-					status = fmt.Sprintf("%s", err)
-				} else {
-					duration = uint64(time.Since(start).Milliseconds())
-					status = "OK"
-				}
-			} else {
-				status = fmt.Sprintf("%s", err)
-			}
-			ch <- msrMsg{urlId: index, v: duration, status: status}
-		}
-	}
-}
+const howLong = 5
 
 func main() {
 
-	table := NewTable()
+	var (
+		data []t.Data = []t.Data{
+			tableItem{url: "http://www.onet.pl"},
+			tableItem{url: "http://www.gazeta.pl"},
+			tableItem{url: "http://www.wsj.com"},
+			tableItem{url: "http://www.google.com"},
+			tableItem{url: "http://nonexistent.com"},
+			tableItem{url: "http://www.icm.edu.pl"},
+		}
+		table = t.New().Init(data, true)
 
-	ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
-	defer func() {
-		w.Log <- "Context timed out. Calling cancel()."
+		// closing     = make(chan struct{})
+		wg          sync.WaitGroup
+		ctx, cancel = context.WithCancel(context.Background())
+	)
+
+	go func() {
+		detect := make(chan os.Signal, 1)
+		signal.Notify(detect, syscall.SIGTERM, os.Interrupt)
+		<-detect
+		fmt.Println(" Ctrl+C")
 		cancel()
+		// close(closing)
 	}()
 
-	w.Init(len(urls) + 4)
+	w.ClearScreen()
+	w.InitLog(ctx, &wg, table.Width, 5)
+	w.SaveCursor()
+	w.HideCursor()
+	defer w.ShowCursor()
 
-	ch := make(chan msrMsg)
-
-	w.Log <- "Launching workers..."
-
-	table.displayHeader()
-	for i := range urls {
-		table.displayRow(i)
-
-		go measurer(ctx, i, ch)
-	}
-
-	var meas msrMsg
-
-	w.Log <- "Starting..."
+	//go runMeters(data)
+	go RunDisplay(ctx, &wg, table)
 
 loop:
 	for {
 		select {
-		case meas = <-ch:
-			table.update(meas)
-			table.displayRow(meas.urlId)
-
 		case <-ctx.Done():
-			w.Log <- "Context expired. Breaking out of loop"
+			fmt.Println("closing")
+			break loop
+		case <-time.After(time.Duration(howLong) * time.Second):
+			fmt.Println("timeout")
+			cancel()
+
 			break loop
 		}
 	}
 
+	fmt.Println("waiting for all goroutinest to finish...")
+	wg.Wait()
+	fmt.Println("bye")
+}
+
+const FPS = 5
+
+// TODO: implment graceful shutdown
+// https://www.rudderstack.com/blog/implementing-graceful-shutdown-in-go/
+// https://justbartek.ca/p/golang-context-wg-go-routines/
+func RunDisplay(ctx context.Context, wg *sync.WaitGroup, table *t.Table) {
+	wg.Add(1)
+	defer func() {
+		fmt.Println("RunDisplay: done")
+		wg.Done()
+	}()
+
+	var (
+		progress = []string{"    ", ".   ", "..  ", "... ", "...."}
+		ticker   = time.NewTicker(1000 * time.Millisecond / FPS).C // frames per second
+		clock    = time.NewTicker(time.Second).C                   // once per second
+
+		tick = 0
+	)
+
+	for {
+		select {
+		case <-ticker:
+			w.RestorCursor()
+			fmt.Println("Pinger running", progress[tick%len(progress)])
+			table.Print()
+			w.PrintLog()
+			tick++
+		case <-ctx.Done():
+			fmt.Println("RunDisplay: ctx.Done")
+			return
+		case <-clock:
+			w.Log <- fmt.Sprint("Performing important stuff ", tick/FPS)
+		}
+	}
 }
