@@ -34,7 +34,7 @@ func New() *Table {
 	return t
 }
 
-// func (t *Table) Init(row any)
+// func (t *Table) Init(rows []Data, displItemNo bool)
 // defines table columns by interpreting table row in struct "td:" tags
 func (t *Table) Init(rows []Data, displItemNo bool) {
 	var key, val string
