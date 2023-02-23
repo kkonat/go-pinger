@@ -21,6 +21,7 @@ type Data interface {
 
 type Table struct {
 	Rows        int
+	Width       int
 	header      string
 	Cols        []Col
 	data        []Data
@@ -108,10 +109,10 @@ func (t *Table) Init(rows []Data, displItemNo bool) {
 		t.Cols = append(t.Cols, col)
 		// fmt.Printf("%#v\n", col)
 	}
-	t.buildHeader()
+	t.Width = t.buildHeader()
 }
 
-func (t *Table) buildHeader() {
+func (t *Table) buildHeader() int {
 	t.header = "|"
 	if t.displItemNo {
 		t.header += "   #"
@@ -133,8 +134,8 @@ func (t *Table) buildHeader() {
 
 		}
 	}
-
 	t.header += "|"
+	return len(t.header)
 }
 func (t Table) DisplaySep() {
 	fmt.Println(strings.Repeat("-", len(t.header)))

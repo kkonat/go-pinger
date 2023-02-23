@@ -1,49 +1,24 @@
 package main
 
 import (
+	"context"
 	"fmt"
+	"os"
+	"os/signal"
 	t "pinger/table"
+	w "pinger/window"
+	"syscall"
+	"time"
 )
 
-type tableItem struct {
-	url     string `td:"name='website',  w= 30,   sep='|'"`
-	lastVal uint64 `td:"name='ping (ms)',w= 9, R, sep='>'"`
-	min     uint64 `td:"w= 8, R"`
-	max     uint64 `td:"w= 8, R"`
-	avg     uint64 `td:"w= 8, R"`
-	status  string `td:"name='errors',   w= 60,   sep='|'"`
-	count   uint64
-	sum     uint64
-	valid   bool
-}
-
-func (ti tableItem) GenCells() *[]string {
-	if ti.valid {
-		return &[]string{
-			ti.url,
-			fmt.Sprintf("%4.d", ti.lastVal),
-			fmt.Sprintf("%4.d", ti.min),
-			fmt.Sprintf("%4.d", ti.max),
-			fmt.Sprintf("%8.2f", float64(ti.sum)/float64(ti.count)),
-			ti.status,
-		}
-	} else {
-		return &[]string{ti.url, "?", "?", "?", "?", "connecting..."}
-	}
-}
-
-// type tablit struct {
-// }
-
-// func (ti tablit) GenCells() *[]string { return &[]string{"", ""} }
+// var wg sync.WaitGroup
+var flowControl chan string
 
 func main() {
-	// dd := tablit{}
-	// var td []t.Data = []t.Data{dd, dd}
-	// fmt.Println("%T", td)
-
+	w.ClearScreen()
+	fmt.Print(w.GoTo(0))
 	table := t.New()
-	var tableData []t.Data = []t.Data{
+	var data []t.Data = []t.Data{
 		tableItem{url: "http://www.onet.pl"},
 		tableItem{url: "http://www.gazeta.pl"},
 		tableItem{url: "http://www.wsj.com"},
@@ -51,50 +26,63 @@ func main() {
 		tableItem{url: "http://nonexistent.com"},
 		tableItem{url: "http://www.icm.edu.pl"},
 	}
+	flowControl = make(chan string)
+	table.Init(data, true)
 
-	table.Init(tableData, true)
-	table.Print()
+	//go runMeters(data)
+	w.SaveCursor()
+	w.HideCursor()
+	defer w.ShowCursor()
 
-	// func (ti *tableItem) GenRowData(row int) []string {
-	// 	return []string{
-	// 		fmt.Sprintf("%3d", row),
-	// 		fmt.Sprintf("%s", tableData[row].url)
-	// 	}
-	// }
-	// 	ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
-	// 	defer func() {
-	// 		w.Log <- "Context timed out. Calling cancel()."
-	// 		cancel()
-	// 	}()
+	go runDisplay(table, flowControl, 15)
+	w.Log <- "Log starts here:"
 
-	// 	w.Init(len(urls) + 4)
+	fmt.Println("Waiting")
+	// wg.Wait()
 
-	// 	ch := make(chan msrMsg)
+	fmt.Println(<-flowControl)
+	fmt.Println("finito")
+}
 
-	// 	w.Log <- "Launching workers..."
+const FPS = 5
 
-	// 	table.displayHeader()
-	// 	for i := range urls {
-	// 		table.displayRow(i)
+// TODO: implment graceful shutdown
+// https://www.rudderstack.com/blog/implementing-graceful-shutdown-in-go/
+func runDisplay(table *t.Table, ch chan string, howlong int) {
+	// wg.Add(1)
+	// defer wg.Done()
+	progress := []string{"    ", ".   ", "..  ", "... ", "...."}
+	ticker := time.NewTicker(1000 * time.Millisecond / FPS).C // frames per second
+	clock := time.NewTicker(time.Second).C                    // once per second
 
-	// 		go measurer(ctx, i, ch)
-	// 	}
+	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(howlong)*time.Second)
+	defer cancel()
 
-	// 	var meas msrMsg
+	w.InitLog(table.Width, 5)
 
-	// 	w.Log <- "Starting..."
+	ctrlC := make(chan os.Signal, 1)
+	signal.Notify(ctrlC, os.Interrupt, syscall.SIGTERM)
 
-	// loop:
-	// 	for {
-	// 		select {
-	// 		case meas = <-ch:
-	// 			table.update(meas)
-	// 			table.displayRow(meas.urlId)
+	tick := 0
 
-	// 		case <-ctx.Done():
-	// 			w.Log <- "Context expired. Breaking out of loop"
-	// 			break loop
-	// 		}
-	// 	}
-
+	for {
+		select {
+		case <-ticker:
+			w.RestorCursor()
+			fmt.Println("Pinger running", progress[tick%len(progress)])
+			table.Print()
+			w.PrintLog()
+			tick++
+		case <-ctrlC:
+			fmt.Println("Ctrl+C")
+			flowControl <- "Ctrl+C"
+			return
+		case <-ctx.Done():
+			fmt.Println("Done")
+			flowControl <- "Done"
+			return
+		case <-clock:
+			w.Log <- fmt.Sprint("Performing important stuff ", tick/FPS)
+		}
+	}
 }

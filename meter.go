@@ -1,11 +1,25 @@
 package main
 
-// import (
-// 	"context"
-// 	"fmt"
-// 	"net/http"
-// 	"time"
-// )
+import (
+	t "pinger/table"
+)
+
+const MPS = 4
+const measurePeriod = 10
+
+func runMeters(data []t.Data) {
+	// ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
+
+	// defer func() {
+	// 	w.Log <- "Context timed out. Calling cancel()."
+	// 	cancel()
+	// }()
+	for i := 0; i < len(data); i++ {
+
+	}
+	// ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
+
+}
 
 // type msrMsg struct {
 // 	urlId  int
@@ -16,8 +30,6 @@ package main
 // func measurer(ctx context.Context, index int, ch chan<- msrMsg) {
 // 	var duration uint64
 // 	status := ""
-
-// 	ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
 
 // 	for {
 // 		select {
@@ -61,3 +73,31 @@ package main
 // 	d.sum += v
 // 	d.count++
 // }
+
+// 	ch := make(chan msrMsg)
+
+// 	w.Log <- "Launching workers..."
+
+// 	table.displayHeader()
+// 	for i := range urls {
+// 		table.displayRow(i)
+
+// 		go measurer(ctx, i, ch)
+// 	}
+
+// 	var meas msrMsg
+
+// 	w.Log <- "Starting..."
+
+// loop:
+// 	for {
+// 		select {
+// 		case meas = <-ch:
+// 			table.update(meas)
+// 			table.displayRow(meas.urlId)
+
+// 		case <-ctx.Done():
+// 			w.Log <- "Context expired. Breaking out of loop"
+// 			break loop
+// 		}
+// 	}
