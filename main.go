@@ -3,67 +3,96 @@ package main
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"os"
 	"os/signal"
 	t "pinger/table"
 	w "pinger/window"
+	"sync"
 	"syscall"
 	"time"
 )
 
-// var wg sync.WaitGroup
-var flowControl chan string
+func init() {
+	rand.Seed(time.Now().Unix())
+}
+
+const howLong = 5
 
 func main() {
-	w.ClearScreen()
-	fmt.Print(w.GoTo(0))
-	table := t.New()
-	var data []t.Data = []t.Data{
-		tableItem{url: "http://www.onet.pl"},
-		tableItem{url: "http://www.gazeta.pl"},
-		tableItem{url: "http://www.wsj.com"},
-		tableItem{url: "http://www.google.com"},
-		tableItem{url: "http://nonexistent.com"},
-		tableItem{url: "http://www.icm.edu.pl"},
-	}
-	flowControl = make(chan string)
-	table.Init(data, true)
 
-	//go runMeters(data)
+	var (
+		data []t.Data = []t.Data{
+			tableItem{url: "http://www.onet.pl"},
+			tableItem{url: "http://www.gazeta.pl"},
+			tableItem{url: "http://www.wsj.com"},
+			tableItem{url: "http://www.google.com"},
+			tableItem{url: "http://nonexistent.com"},
+			tableItem{url: "http://www.icm.edu.pl"},
+		}
+		table = t.New().Init(data, true)
+
+		// closing     = make(chan struct{})
+		wg          sync.WaitGroup
+		ctx, cancel = context.WithCancel(context.Background())
+	)
+
+	go func() {
+		detect := make(chan os.Signal, 1)
+		signal.Notify(detect, syscall.SIGTERM, os.Interrupt)
+		<-detect
+		fmt.Println(" Ctrl+C")
+		cancel()
+		// close(closing)
+	}()
+
+	w.ClearScreen()
+	w.InitLog(ctx, &wg, table.Width, 5)
 	w.SaveCursor()
 	w.HideCursor()
 	defer w.ShowCursor()
 
-	go runDisplay(table, flowControl, 15)
-	w.Log <- "Log starts here:"
+	//go runMeters(data)
+	go RunDisplay(ctx, &wg, table)
 
-	fmt.Println("Waiting")
-	// wg.Wait()
+loop:
+	for {
+		select {
+		case <-ctx.Done():
+			fmt.Println("closing")
+			break loop
+		case <-time.After(time.Duration(howLong) * time.Second):
+			fmt.Println("timeout")
+			cancel()
 
-	fmt.Println(<-flowControl)
-	fmt.Println("finito")
+			break loop
+		}
+	}
+
+	fmt.Println("waiting for all goroutinest to finish...")
+	wg.Wait()
+	fmt.Println("bye")
 }
 
 const FPS = 5
 
 // TODO: implment graceful shutdown
 // https://www.rudderstack.com/blog/implementing-graceful-shutdown-in-go/
-func runDisplay(table *t.Table, ch chan string, howlong int) {
-	// wg.Add(1)
-	// defer wg.Done()
-	progress := []string{"    ", ".   ", "..  ", "... ", "...."}
-	ticker := time.NewTicker(1000 * time.Millisecond / FPS).C // frames per second
-	clock := time.NewTicker(time.Second).C                    // once per second
+// https://justbartek.ca/p/golang-context-wg-go-routines/
+func RunDisplay(ctx context.Context, wg *sync.WaitGroup, table *t.Table) {
+	wg.Add(1)
+	defer func() {
+		fmt.Println("RunDisplay: done")
+		wg.Done()
+	}()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Duration(howlong)*time.Second)
-	defer cancel()
+	var (
+		progress = []string{"    ", ".   ", "..  ", "... ", "...."}
+		ticker   = time.NewTicker(1000 * time.Millisecond / FPS).C // frames per second
+		clock    = time.NewTicker(time.Second).C                   // once per second
 
-	w.InitLog(table.Width, 5)
-
-	ctrlC := make(chan os.Signal, 1)
-	signal.Notify(ctrlC, os.Interrupt, syscall.SIGTERM)
-
-	tick := 0
+		tick = 0
+	)
 
 	for {
 		select {
@@ -73,13 +102,8 @@ func runDisplay(table *t.Table, ch chan string, howlong int) {
 			table.Print()
 			w.PrintLog()
 			tick++
-		case <-ctrlC:
-			fmt.Println("Ctrl+C")
-			flowControl <- "Ctrl+C"
-			return
 		case <-ctx.Done():
-			fmt.Println("Done")
-			flowControl <- "Done"
+			fmt.Println("RunDisplay: ctx.Done")
 			return
 		case <-clock:
 			w.Log <- fmt.Sprint("Performing important stuff ", tick/FPS)

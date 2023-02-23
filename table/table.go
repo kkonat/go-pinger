@@ -36,7 +36,7 @@ func New() *Table {
 
 // func (t *Table) Init(rows []Data, displItemNo bool)
 // defines table columns by interpreting table row in struct "td:" tags
-func (t *Table) Init(rows []Data, displItemNo bool) {
+func (t *Table) Init(rows []Data, displItemNo bool) *Table {
 	var key, val string
 
 	t.data = rows
@@ -66,17 +66,18 @@ func (t *Table) Init(rows []Data, displItemNo bool) {
 				panic(fmt.Sprintf("table td: tag - key=value pair invalid: '%s'", currTag))
 			}
 
+			valLen := len(val)
 			switch key {
 
 			case "name":
-				if len(val) < 3 && val[0] != '\'' && val[len(val)-1] != '\'' {
+				if valLen < 3 && val[0] != '\'' && val[valLen-1] != '\'' {
 					panic("table td: tag - name must be at least 1 char within ' '")
 				}
-				if col.Width != 0 && len(val)-2 > col.Width {
+				if col.Width != 0 && valLen-2 > col.Width {
 					panic(fmt.Sprintf("table td: tag - name (%s) is longer (%d) than colum width (%d)",
-						val, len(val)-2, col.Width))
+						val, valLen-2, col.Width))
 				}
-				col.Name = val[1 : len(val)-1]
+				col.Name = val[1 : valLen-1]
 				col.visible = true
 
 			case "w":
@@ -90,11 +91,12 @@ func (t *Table) Init(rows []Data, displItemNo bool) {
 				}
 				col.Width = w
 				col.visible = true
+
 			case "sep":
-				if len(val) < 3 {
+				if valLen < 3 {
 					panic("table: td: sep must be at least 1 char within ' '")
 				}
-				col.Sep = val[1 : len(val)-1]
+				col.Sep = val[1 : valLen-1]
 
 			case "R":
 				fallthrough
@@ -110,6 +112,7 @@ func (t *Table) Init(rows []Data, displItemNo bool) {
 		// fmt.Printf("%#v\n", col)
 	}
 	t.Width = t.buildHeader()
+	return t
 }
 
 func (t *Table) buildHeader() int {

@@ -1,6 +1,7 @@
 package window
 
 import (
+	"context"
 	"fmt"
 	"sync"
 	"time"
@@ -8,7 +9,7 @@ import (
 
 var wm sync.Mutex
 
-func ClearScreen()      { fmt.Printf("\033[2J") }
+func ClearScreen()      { fmt.Printf("\033[2J\033[0;0H") } // cls and goto 0:0
 func HideCursor()       { fmt.Print("\033[?25l") }
 func ShowCursor()       { fmt.Print("\033[?25h") }
 func SaveCursor()       { fmt.Print("\033[s") }
@@ -19,12 +20,13 @@ var logLines []string
 var maxWidth, maxLines int
 var Log chan string
 
-func InitLog(mw, ml int) {
+func InitLog(ctx context.Context, wg *sync.WaitGroup, mw, ml int) {
+
 	maxLines, maxWidth = ml, mw
 	logLines = make([]string, 0, maxLines)
 	Log = make(chan string)
 
-	go logger()
+	go logger(ctx, wg)
 }
 
 func PrintLog() {
@@ -33,7 +35,13 @@ func PrintLog() {
 	}
 }
 
-func logger() {
+func logger(ctx context.Context, wg *sync.WaitGroup) {
+	wg.Add(1)
+	defer func() {
+		wg.Done()
+		fmt.Println("logger done")
+	}()
+
 	for {
 		select {
 		case line := <-Log:
@@ -47,7 +55,9 @@ func logger() {
 				logLines = logLines[1:maxLines]
 			}
 			logLines = append(logLines, l)
+		case <-ctx.Done():
+			fmt.Println("logger ctx.Done")
+			return
 		}
-
 	}
 }
