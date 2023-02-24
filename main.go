@@ -41,7 +41,6 @@ func main() {
 		detect := make(chan os.Signal, 1)
 		signal.Notify(detect, syscall.SIGTERM, os.Interrupt)
 		<-detect
-		fmt.Println(" Ctrl+C")
 		cancel()
 	}()
 
@@ -58,10 +57,8 @@ loop:
 	for {
 		select {
 		case <-ctx.Done():
-			fmt.Println("closing")
 			break loop
 		case <-time.After(time.Duration(howLong) * time.Second):
-			fmt.Println("timeout")
 			cancel()
 
 			break loop

@@ -51,7 +51,6 @@ func logger(ctx context.Context) {
 			}
 			logLines = append(logLines, l)
 		case <-ctx.Done():
-			fmt.Println("logger ctx.Done")
 			return
 		}
 	}

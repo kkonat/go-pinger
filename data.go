@@ -11,3 +11,5 @@ type pinger struct {
 	sum     uint64
 	valid   bool
 }
+
+func (p pinger) IsValid() bool { return p.valid }

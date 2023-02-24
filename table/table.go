@@ -16,8 +16,11 @@ type col struct {
 
 	invalidStr string
 }
+type validatable interface {
+	IsValid() bool
+}
 
-type Table[Data any] struct {
+type Table[Data validatable] struct {
 	width      int
 	header     string
 	cols       []col
@@ -25,7 +28,7 @@ type Table[Data any] struct {
 	displayNos bool
 }
 
-func New[Data any](rows []Data, displItemNo bool) *Table[Data] {
+func New[Data validatable](rows []Data, displItemNo bool) *Table[Data] {
 	var (
 		a Data
 		t = &Table[Data]{
