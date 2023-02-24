@@ -1,25 +1,21 @@
 package main
 
-import (
-	t "pinger/table"
-)
-
 const MPS = 4
 const measurePeriod = 10
 
-func runMeters(data []t.Data) {
-	// ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
+// func runMeters(data []t.Data) {
+// ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
 
-	// defer func() {
-	// 	w.Log <- "Context timed out. Calling cancel()."
-	// 	cancel()
-	// }()
-	for i := 0; i < len(data); i++ {
+// defer func() {
+// 	w.Log <- "Context timed out. Calling cancel()."
+// 	cancel()
+// }()
+// for i := 0; i < len(data); i++ {
 
-	}
-	// ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
+// }
+// ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
 
-}
+// }
 
 // type msrMsg struct {
 // 	urlId  int

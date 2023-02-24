@@ -20,13 +20,13 @@ var logLines []string
 var maxWidth, maxLines int
 var Log chan string
 
-func InitLog(ctx context.Context, wg *sync.WaitGroup, mw, ml int) {
+func InitLog(ctx context.Context, mw, ml int) {
 
 	maxLines, maxWidth = ml, mw
 	logLines = make([]string, 0, maxLines)
 	Log = make(chan string)
 
-	go logger(ctx, wg)
+	go logger(ctx)
 }
 
 func PrintLog() {
@@ -35,12 +35,7 @@ func PrintLog() {
 	}
 }
 
-func logger(ctx context.Context, wg *sync.WaitGroup) {
-	wg.Add(1)
-	defer func() {
-		wg.Done()
-		fmt.Println("logger done")
-	}()
+func logger(ctx context.Context) {
 
 	for {
 		select {

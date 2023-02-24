@@ -19,21 +19,21 @@ func init() {
 
 const howLong = 5
 
+var wg sync.WaitGroup
+
 func main() {
 
 	var (
-		data []t.Data = []t.Data{
-			tableItem{url: "http://www.onet.pl"},
-			tableItem{url: "http://www.gazeta.pl"},
-			tableItem{url: "http://www.wsj.com"},
-			tableItem{url: "http://www.google.com"},
-			tableItem{url: "http://nonexistent.com"},
-			tableItem{url: "http://www.icm.edu.pl"},
+		data []pinger = []pinger{
+			{url: "http://www.onet.pl", min: 1, max: 2, avg: 3.14, valid: true},
+			{url: "http://www.gazeta.pl"},
+			{url: "http://www.wsj.com"},
+			{url: "http://www.google.com"},
+			{url: "http://nonexistent.com"},
+			{url: "http://www.icm.edu.pl"},
 		}
-		table = t.New().Init(data, true)
+		table = t.New(data, true)
 
-		// closing     = make(chan struct{})
-		wg          sync.WaitGroup
 		ctx, cancel = context.WithCancel(context.Background())
 	)
 
@@ -43,17 +43,16 @@ func main() {
 		<-detect
 		fmt.Println(" Ctrl+C")
 		cancel()
-		// close(closing)
 	}()
 
 	w.ClearScreen()
-	w.InitLog(ctx, &wg, table.Width, 5)
+	w.InitLog(ctx, table.MaxWidth(), 5)
 	w.SaveCursor()
 	w.HideCursor()
 	defer w.ShowCursor()
 
 	//go runMeters(data)
-	go RunDisplay(ctx, &wg, table)
+	go RunDisplay(ctx, table)
 
 loop:
 	for {
@@ -68,8 +67,6 @@ loop:
 			break loop
 		}
 	}
-
-	fmt.Println("waiting for all goroutinest to finish...")
 	wg.Wait()
 	fmt.Println("bye")
 }
@@ -79,12 +76,7 @@ const FPS = 5
 // TODO: implment graceful shutdown
 // https://www.rudderstack.com/blog/implementing-graceful-shutdown-in-go/
 // https://justbartek.ca/p/golang-context-wg-go-routines/
-func RunDisplay(ctx context.Context, wg *sync.WaitGroup, table *t.Table) {
-	wg.Add(1)
-	defer func() {
-		fmt.Println("RunDisplay: done")
-		wg.Done()
-	}()
+func RunDisplay(ctx context.Context, table *t.Table[pinger]) {
 
 	var (
 		progress = []string{"    ", ".   ", "..  ", "... ", "...."}
@@ -97,13 +89,15 @@ func RunDisplay(ctx context.Context, wg *sync.WaitGroup, table *t.Table) {
 	for {
 		select {
 		case <-ticker:
+			wg.Add(1)
 			w.RestorCursor()
 			fmt.Println("Pinger running", progress[tick%len(progress)])
 			table.Print()
 			w.PrintLog()
 			tick++
+			wg.Done()
 		case <-ctx.Done():
-			fmt.Println("RunDisplay: ctx.Done")
+
 			return
 		case <-clock:
 			w.Log <- fmt.Sprint("Performing important stuff ", tick/FPS)
