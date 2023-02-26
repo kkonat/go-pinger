@@ -3,6 +3,7 @@ package window
 import (
 	"context"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -20,7 +21,7 @@ var logLines []string
 var maxWidth, maxLines int
 var Log chan string
 
-func InitLog(ctx context.Context, mw, ml int) {
+func StartLog(ctx context.Context, mw, ml int) {
 
 	maxLines, maxWidth = ml, mw
 	logLines = make([]string, 0, maxLines)
@@ -30,8 +31,9 @@ func InitLog(ctx context.Context, mw, ml int) {
 }
 
 func PrintLog() {
+	fmt.Println("Log:")
 	for _, l := range logLines {
-		fmt.Println(l)
+		fmt.Println(l + strings.Repeat(" ", maxWidth-len(l)))
 	}
 }
 

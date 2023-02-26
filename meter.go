@@ -1,99 +1,66 @@
 package main
 
-const MPS = 4
-const measurePeriod = 10
+import (
+	"context"
+	"fmt"
+	"math/rand"
+	w "pinger/window"
+	"time"
+)
 
-// func runMeters(data []t.Data) {
-// ctx, cancel := context.WithTimeout(context.Background(), measurePeriod*time.Second)
+const MPS = 2
+const minRepeatTime = 777
 
-// defer func() {
-// 	w.Log <- "Context timed out. Calling cancel()."
-// 	cancel()
-// }()
-// for i := 0; i < len(data); i++ {
+type measResult struct {
+	val  uint64
+	indx int
+}
 
-// }
-// ticker := time.NewTicker(1000 * time.Millisecond / MPS).C
+// simulate
+func measure(ctx context.Context, resultStream chan<- measResult, i int) {
+	start := time.Now()
+	timeout := time.After(20 + time.Duration(rand.Intn(3000))*time.Millisecond)
 
-// }
+	select {
+	case <-timeout:
+		dur := uint64(time.Since(start).Milliseconds())
+		resultStream <- measResult{val: dur, indx: i}
+		return
+	case <-ctx.Done():
+		return
+	}
+}
 
-// type msrMsg struct {
-// 	urlId  int
-// 	v      uint64
-// 	status string
-// }
+func runMeters(ctx context.Context, data []pinger) {
+	w.Log <- "running  meters..."
+	resultStream := make(chan measResult, len(data))
+	//resultStream := make(chan measResult)
 
-// func measurer(ctx context.Context, index int, ch chan<- msrMsg) {
-// 	var duration uint64
-// 	status := ""
+	for i := range data {
+		go measure(ctx, resultStream, i)
+	}
 
-// 	for {
-// 		select {
+	for {
+		select {
+		case r := <-resultStream:
+			data[r.indx].setVal(uint64(r.val))
+			if r.val < minRepeatTime {
+				delay := minRepeatTime - r.val
+				w.Log <- "delaying..."
+				time.Sleep(time.Millisecond * time.Duration(delay))
+			}
+			w.Log <- fmt.Sprintf("respawning measurement after delay: %d", r.val)
+			go measure(ctx, resultStream, r.indx)
 
-// 		case <-ctx.Done():
-// 			w.Log <- fmt.Sprintf("terminating: %d", index)
-// 			return
+		case <-ctx.Done():
+			close(resultStream)
+			return
+		}
+	}
+}
 
-// 		case <-ticker:
-
-// 			start := time.Now()
-// 			req, err := http.NewRequestWithContext(ctx, "GET", urls[index], nil)
-// 			if err == nil {
-// 				_, err = http.DefaultClient.Do(req)
-// 				if err != nil {
-// 					status = fmt.Sprintf("%s", err)
-// 				} else {
-// 					duration = uint64(time.Since(start).Milliseconds())
-// 					status = "OK"
-// 				}
-// 			} else {
-// 				status = fmt.Sprintf("%s", err)
-// 			}
-// 			ch <- msrMsg{urlId: index, v: duration, status: status}
-// 		}
-// 	}
-// }
-
-// func (d *tableItem) update(v uint64) {
-// 	if d.count == 0 {
-// 		d.min = v
-// 		d.max = v
-// 	} else {
-// 		if d.min > v {
-// 			d.min = v
-// 		} else if d.max < v {
-// 			d.max = v
-// 		}
-// 	}
-// 	d.lastVal = v
-// 	d.sum += v
-// 	d.count++
-// }
-
-// 	ch := make(chan msrMsg)
-
-// 	w.Log <- "Launching workers..."
-
-// 	table.displayHeader()
-// 	for i := range urls {
-// 		table.displayRow(i)
-
-// 		go measurer(ctx, i, ch)
-// 	}
-
-// 	var meas msrMsg
-
-// 	w.Log <- "Starting..."
-
-// loop:
-// 	for {
-// 		select {
-// 		case meas = <-ch:
-// 			table.update(meas)
-// 			table.displayRow(meas.urlId)
-
-// 		case <-ctx.Done():
-// 			w.Log <- "Context expired. Breaking out of loop"
-// 			break loop
-// 		}
-// 	}
+// TODO various pinger options
+// https://medium.com/@deeeet/trancing-http-request-latency-in-golang-65b2463f548c
+// https://stackoverflow.com/questions/41423637/go-ping-library-for-unprivileged-icmp-ping-in-golang
+// https://github.com/davecheney/httpstat
+// https://pkg.go.dev/search?q=netstat

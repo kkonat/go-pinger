@@ -3,29 +3,21 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	"os"
 	"os/signal"
 	t "pinger/table"
 	w "pinger/window"
-	"sync"
 	"syscall"
 	"time"
 )
 
-func init() {
-	rand.Seed(time.Now().Unix())
-}
-
-const howLong = 5
-
-var wg sync.WaitGroup
+const howLong = 12
 
 func main() {
 
 	var (
 		data []pinger = []pinger{
-			{url: "http://www.onet.pl", min: 1, max: 2, avg: 3.14, valid: true},
+			{url: "http://www.onet.pl"},
 			{url: "http://www.gazeta.pl"},
 			{url: "http://www.wsj.com"},
 			{url: "http://www.google.com"},
@@ -36,68 +28,57 @@ func main() {
 
 		ctx, cancel = context.WithCancel(context.Background())
 	)
+	defer cancel()
+
+	abort := make(chan struct{})
 
 	go func() {
 		detect := make(chan os.Signal, 1)
 		signal.Notify(detect, syscall.SIGTERM, os.Interrupt)
 		<-detect
-		cancel()
+		close(abort)
 	}()
 
 	w.ClearScreen()
-	w.InitLog(ctx, table.MaxWidth(), 5)
 	w.SaveCursor()
 	w.HideCursor()
-	defer w.ShowCursor()
 
-	//go runMeters(data)
-	go RunDisplay(ctx, table)
+	w.StartLog(ctx, table.GetWidth(), 5)
 
-loop:
-	for {
-		select {
-		case <-ctx.Done():
-			break loop
-		case <-time.After(time.Duration(howLong) * time.Second):
-			cancel()
+	go runMeters(ctx, data)
 
-			break loop
-		}
+	go runDisplay(ctx, table)
+
+	select {
+	case <-abort:
+	case <-time.After(time.Duration(howLong) * time.Second):
 	}
-	wg.Wait()
-	fmt.Println("bye")
+	fmt.Println("Bye")
+	w.ShowCursor()
 }
 
 const FPS = 5
 
-// TODO: implment graceful shutdown
-// https://www.rudderstack.com/blog/implementing-graceful-shutdown-in-go/
-// https://justbartek.ca/p/golang-context-wg-go-routines/
-func RunDisplay(ctx context.Context, table *t.Table[pinger]) {
+func runDisplay(ctx context.Context, table *t.Table[pinger]) {
 
 	var (
 		progress = []string{"    ", ".   ", "..  ", "... ", "...."}
 		ticker   = time.NewTicker(1000 * time.Millisecond / FPS).C // frames per second
-		clock    = time.NewTicker(time.Second).C                   // once per second
 
 		tick = 0
 	)
 
+loop:
 	for {
 		select {
 		case <-ticker:
-			wg.Add(1)
 			w.RestorCursor()
 			fmt.Println("Pinger running", progress[tick%len(progress)])
 			table.Print()
 			w.PrintLog()
 			tick++
-			wg.Done()
 		case <-ctx.Done():
-
-			return
-		case <-clock:
-			w.Log <- fmt.Sprint("Performing important stuff ", tick/FPS)
+			break loop
 		}
 	}
 }
