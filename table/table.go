@@ -158,7 +158,7 @@ func (t *Table[Data]) cellToString(row, col int) string {
 		valid = rowRV.FieldByName("valid")     // value of the 'valid" field in the row structure
 	)
 
-	if !valid.Bool() {
+	if !valid.Bool() && t.cols[col].invalidStr != "" {
 		return t.cols[col].invalidStr
 	}
 
@@ -179,8 +179,14 @@ func (t *Table[Data]) cellToString(row, col int) string {
 
 	case reflect.String:
 		str = value.String()
-	}
 
+	case reflect.Bool:
+		if value.Bool() {
+			str = "x"
+		} else {
+			str = " "
+		}
+	}
 	return str
 }
 

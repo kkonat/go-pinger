@@ -11,18 +11,18 @@ import (
 	"time"
 )
 
-const howLong = 12
+const howLong = 60
 
 func main() {
 
 	var (
 		data []pinger = []pinger{
-			{url: "http://www.onet.pl"},
-			{url: "http://www.gazeta.pl"},
-			{url: "http://www.wsj.com"},
-			{url: "http://www.google.com"},
-			{url: "http://nonexistent.com"},
-			{url: "http://www.icm.edu.pl"},
+			{url: "www.onet.pl"},
+			{url: "www.gazeta.pl"},
+			{url: "www.wsj.com"},
+			{url: "www.google.com"},
+			{url: "nonexistent.com"},
+			{url: "www.icm.edu.pl"},
 		}
 		table = t.New(data, true)
 

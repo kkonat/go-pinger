@@ -3,28 +3,53 @@ package main
 import (
 	"context"
 	"fmt"
-	"math/rand"
 	w "pinger/window"
 	"time"
+
+	probing "github.com/prometheus-community/pro-bing"
 )
 
 const MPS = 2
 const minRepeatTime = 777
 
 type measResult struct {
-	val  uint64
+	tts  time.Duration
 	indx int
+	err  error
 }
 
-// simulate
-func measure(ctx context.Context, resultStream chan<- measResult, i int) {
-	start := time.Now()
-	timeout := time.After(20 + time.Duration(rand.Intn(3000))*time.Millisecond)
+func measure(ctx context.Context, resultStream chan<- measResult, data []pinger, i int) {
+
+	result := make(chan measResult)
+
+	pinger, err := probing.NewPinger(data[i].url)
+
+	pinger.SetPrivileged(true)
+	if err != nil {
+		w.Log <- fmt.Sprint("Error 1:", err)
+		resultStream <- measResult{tts: 0, indx: i, err: err}
+		return
+	}
+
+	pinger.Count = 3
+	pinger.Interval = 200 * time.Millisecond
+	pinger.Timeout = 3 * time.Second
+	go func() {
+
+		err = pinger.Run() // Blocks until finished.
+
+		if err != nil {
+			w.Log <- fmt.Sprint("Error 2:", err)
+			resultStream <- measResult{tts: 0, indx: i, err: err}
+			return
+		}
+		stats := pinger.Statistics() // get send/receive/duplicate/rtt stats
+		result <- measResult{tts: stats.AvgRtt, indx: i, err: nil}
+	}()
 
 	select {
-	case <-timeout:
-		dur := uint64(time.Since(start).Milliseconds())
-		resultStream <- measResult{val: dur, indx: i}
+	case res := <-result:
+		resultStream <- res
 		return
 	case <-ctx.Done():
 		return
@@ -37,21 +62,24 @@ func runMeters(ctx context.Context, data []pinger) {
 	//resultStream := make(chan measResult)
 
 	for i := range data {
-		go measure(ctx, resultStream, i)
+		w.Log <- "pinging " + data[i].url + " ..."
+		data[i].SetStatus("connecting...")
+		go measure(ctx, resultStream, data, i)
 	}
 
 	for {
 		select {
-		case r := <-resultStream:
-			data[r.indx].setVal(uint64(r.val))
-			if r.val < minRepeatTime {
-				delay := minRepeatTime - r.val
-				w.Log <- "delaying..."
-				time.Sleep(time.Millisecond * time.Duration(delay))
+		case res := <-resultStream:
+			if res.err != nil {
+				data[res.indx].Invalidate(res.err.Error())
+			} else {
+				data[res.indx].SetVal(float64(res.tts.Nanoseconds()) / 1.0e6)
 			}
-			w.Log <- fmt.Sprintf("respawning measurement after delay: %d", r.val)
-			go measure(ctx, resultStream, r.indx)
 
+			w.Log <- "repinging " + data[res.indx].url + " ..."
+			time.Sleep(time.Millisecond * 500)
+			go measure(ctx, resultStream, data, res.indx)
+			continue
 		case <-ctx.Done():
 			close(resultStream)
 			return
